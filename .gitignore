@@ -1,0 +1,12 @@
+# Build / IDE
+build/
+.gradle/
+.idea/
+*.iml
+local.properties
+.DS_Store
+
+# Secrets / signing
+*.jks
+*.keystore
+.env
