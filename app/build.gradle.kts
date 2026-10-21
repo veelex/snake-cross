@@ -16,12 +16,26 @@ android {
         versionName = "1.0"
     }
 
+    // Release signing comes from environment variables (set by the GitHub workflow
+    // from repository secrets, or exported locally). Without them, the release build
+    // falls back to the debug key so it still builds.
+    val releaseKeystore = System.getenv("KEYSTORE_FILE")
+    signingConfigs {
+        if (releaseKeystore != null && file(releaseKeystore).exists()) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Signed with the debug key so the APK is installable without a keystore.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
