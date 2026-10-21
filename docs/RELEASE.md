@@ -26,3 +26,10 @@ Repo -> Settings -> Secrets and variables -> Actions -> New repository secret:
 
 Bump `versionCode`/`versionName` in `app/build.gradle.kts` before each release.
 The `.aab` is what the Play Store wants; the `.apk` is for direct installs.
+
+## Troubleshooting: "base64: invalid input"
+`KEYSTORE_BASE64` must be the base64 *text* of `release.jks`, pasted whole, as one value.
+- Linux: `base64 -w0 release.jks`   macOS: `base64 -i release.jks | tr -d '\n'`
+- Windows PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("release.jks"))`
+Copy the entire output (it is long, thousands of characters) and paste it into the secret.
+Do not paste the file path or the file's raw contents.

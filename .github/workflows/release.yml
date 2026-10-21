@@ -32,7 +32,13 @@ jobs:
       - name: Decode keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+        run: |
+          # Tolerate CRLF/spaces and certutil's -----BEGIN/END----- lines
+          printf '%s' "$KEYSTORE_BASE64" | grep -v -- '-----' | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/release.jks" \
+            || { echo "::error::KEYSTORE_BASE64 is not valid base64. Re-create it as described in docs/RELEASE.md"; exit 1; }
+          # A real keystore starts with 0xFEEDFEED (JKS) or 0x30 (PKCS12)
+          head -c 4 "$RUNNER_TEMP/release.jks" | xxd -p | grep -qiE '^(feedfeed|30)' \
+            || { echo "::error::Decoded file is not a keystore. Did you encode release.jks?"; exit 1; }
 
       - name: Build signed release APK + AAB
         env:
