@@ -40,6 +40,42 @@ jobs:
           head -c 4 "$RUNNER_TEMP/release.jks" | xxd -p | grep -qiE '^(feedfeed|30)' \
             || { echo "::error::Decoded file is not a keystore. Did you encode release.jks?"; exit 1; }
 
+      - name: Verify keystore, alias and passwords
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          KS="$RUNNER_TEMP/release.jks"
+          for v in KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            [ -n "${!v}" ] || { echo "::error::Secret $v is empty or missing"; exit 1; }
+          done
+          # 1) keystore password
+          if ! keytool -list -keystore "$KS" -storepass:env KEYSTORE_PASSWORD > "$RUNNER_TEMP/kt.txt" 2>&1; then
+            echo "::error::KEYSTORE_PASSWORD is wrong (cannot open the keystore)."; exit 1
+          fi
+          # 2) alias (case-sensitive; keytool prints aliases lowercased, so compare case-insensitively)
+          if ! grep -qiE "^${KEY_ALIAS},[[:space:]]" "$RUNNER_TEMP/kt.txt"; then
+            echo "::error::KEY_ALIAS does not match any alias in the keystore. Aliases found (names only):"
+            grep -E ', (PrivateKeyEntry|trustedCertEntry|SecretKeyEntry)' "$RUNNER_TEMP/kt.txt" | cut -d, -f1
+            exit 1
+          fi
+          # 3) key password
+          if grep -qi "Keystore type: PKCS12" "$RUNNER_TEMP/kt.txt"; then
+            # PKCS12 keystores use one password for store and key
+            if [ "$KEY_PASSWORD" != "$KEYSTORE_PASSWORD" ]; then
+              echo "::error::KEY_PASSWORD must equal KEYSTORE_PASSWORD for a PKCS12 keystore."; exit 1
+            fi
+          else
+            cp "$KS" "$RUNNER_TEMP/check.jks"
+            if ! keytool -keypasswd -keystore "$RUNNER_TEMP/check.jks" -storepass:env KEYSTORE_PASSWORD \
+                   -alias "$KEY_ALIAS" -keypass:env KEY_PASSWORD -new "$KEY_PASSWORD" >/dev/null 2>&1; then
+              echo "::error::KEY_PASSWORD is wrong for this alias."; exit 1
+            fi
+          fi
+          rm -f "$RUNNER_TEMP/check.jks" "$RUNNER_TEMP/kt.txt"
+          echo "Keystore, alias and passwords look good."
+
       - name: Build signed release APK + AAB
         env:
           KEYSTORE_FILE: ${{ runner.temp }}/release.jks
